@@ -2,7 +2,6 @@
   <img src="./assets/logo.png" width=200>
 </div>
 
-# Four Sight
 A rust based engine for [Connect Four](https://en.wikipedia.org/wiki/Connect_Four). It uses MCTS search for optimal move prediction. It also support UCI-ish commands for communication
 
 Sample output for a game I played against another bot.
