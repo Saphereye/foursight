@@ -248,14 +248,17 @@ struct MCTSEngine {
 impl MCTSEngine {
     fn new() -> Self {
         MCTSEngine {
-            iterations: 50000, // Increased default iterations
+            iterations: u32::MAX, // Increased default iterations
             exploration_constant: 1.414,
         }
     }
 
-    fn search(&self, board: BitBoard, is_player1_turn: bool) -> usize {
+    fn search(&self, board: BitBoard, is_player1_turn: bool, move_time_ms: u32) -> usize {
         // Enhanced immediate tactical analysis
         let legal_moves = board.get_legal_moves();
+        let time_limit =
+            std::time::Instant::now() + std::time::Duration::from_millis(move_time_ms as u64);
+        let start_time = std::time::Instant::now();
 
         // 1. Check for immediate winning moves
         for &col in &legal_moves {
@@ -294,6 +297,29 @@ impl MCTSEngine {
         let mut root = MCTSNode::new(board, is_player1_turn);
 
         for _ in 0..self.iterations {
+            // Check if we should stop early based on time limit
+            if std::time::Instant::now() >= time_limit {
+                break;
+            }
+
+            // Log out the best move in uci style every 1000 iterations
+            if root.visits % 100_000 == 0 {
+                println!(
+                    "info string iteration {} score {:.2} nodes {} nps {:.0} pv {:?}",
+                    root.visits,
+                    if root.visits > 0 {
+                        (root.wins / root.visits as f64) * 2.0 - 1.0
+                    } else {
+                        0.0
+                    },
+                    root.visits,
+                    root.visits as f64
+                        / (std::time::Instant::now() - start_time)
+                            .as_secs_f64()
+                            .max(1.0),
+                    root.get_best_move().unwrap_or(3) + 1
+                );
+            }
             self.mcts_iteration(&mut root);
         }
 
@@ -305,7 +331,11 @@ impl MCTSEngine {
         &self,
         board: BitBoard,
         is_player1_turn: bool,
+        move_time_ms: u32,
+        iterations: u32,
     ) -> (f64, HashMap<usize, (f64, u32)>) {
+        let time_limit =
+            std::time::Instant::now() + std::time::Duration::from_millis(move_time_ms as u64);
         // Quick check for terminal positions
         if let Some(winner) = board.check_winner() {
             let score = if winner == is_player1_turn { 1.0 } else { -1.0 };
@@ -346,7 +376,10 @@ impl MCTSEngine {
         // Perform MCTS search for evaluation
         let mut root = MCTSNode::new(board, is_player1_turn);
 
-        for _ in 0..self.iterations {
+        for _ in 0..iterations {
+            if std::time::Instant::now() >= time_limit {
+                break; // Stop if we hit the time limit
+            }
             self.mcts_iteration(&mut root);
         }
 
@@ -542,7 +575,7 @@ fn main() {
                     env!("CARGO_PKG_VERSION")
                 );
                 println!("id author {}", env!("CARGO_PKG_AUTHORS"));
-                println!("option name Iterations type spin default 50000");
+                println!("option name Iterations type spin");
                 println!("option name ExplorationConstant type string default 1.414");
                 println!("uciok");
             }
@@ -586,13 +619,19 @@ fn main() {
             "go" => {
                 // Parse search parameters
                 let mut search_iterations = engine.iterations;
+                let mut move_time_ms = u32::MAX;
 
                 for i in 1..parts.len() {
                     match parts[i] {
                         "movetime" if i + 1 < parts.len() => {
                             if let Ok(time_ms) = parts[i + 1].parse::<u32>() {
                                 // Rough estimation: 1000 iterations per 10ms
-                                search_iterations = (time_ms * 100).clamp(10000, 200000);
+                                move_time_ms = time_ms;
+                            }
+                        }
+                        "iterations" if i + 1 < parts.len() => {
+                            if let Ok(iter) = parts[i + 1].parse::<u32>() {
+                                search_iterations = iter;
                             }
                         }
                         _ => {}
@@ -602,7 +641,7 @@ fn main() {
                 let original_iterations = engine.iterations;
                 engine.iterations = search_iterations;
 
-                let best_move = engine.search(current_board, is_player1_turn);
+                let best_move = engine.search(current_board, is_player1_turn, move_time_ms);
                 println!("bestmove {}", best_move + 1); // Convert back to 1-indexed
 
                 engine.iterations = original_iterations;
@@ -615,6 +654,23 @@ fn main() {
                 let p1_threats = current_board.count_threats(true);
                 let p2_threats = current_board.count_threats(false);
                 let winner = current_board.check_winner();
+                let mut move_time_ms = u32::MAX;
+                let mut iterations = engine.iterations;
+                for i in 1..parts.len() {
+                    match parts[i] {
+                        "movetime" if i + 1 < parts.len() => {
+                            if let Ok(time_ms) = parts[i + 1].parse::<u32>() {
+                                move_time_ms = time_ms;
+                            }
+                        }
+                        "iterations" if i + 1 < parts.len() => {
+                            if let Ok(iter) = parts[i + 1].parse::<u32>() {
+                                iterations = iter;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
 
                 println!("info string === Position Evaluation ===");
 
@@ -669,8 +725,12 @@ fn main() {
                     println!("info string Running MCTS evaluation...");
                 }
 
-                let (position_score, move_evals) =
-                    engine.evaluate_position(current_board, is_player1_turn);
+                let (position_score, move_evals) = engine.evaluate_position(
+                    current_board,
+                    is_player1_turn,
+                    move_time_ms,
+                    iterations,
+                );
 
                 println!(
                     "info string Current player: {}",
