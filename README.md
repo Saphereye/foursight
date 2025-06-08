@@ -35,9 +35,9 @@ info string Position score: 0.974 (positive favors current player)
 info string Assessment: Strong advantage
 info string Player 1 threats: 0, Player 2 threats: 0
 info string === Move Analysis ===
-info string   Move 5: +1.000 (5397 simulations)
-info string   Move 7: +0.985 (6999 simulations)
-info string   Move 6: +0.984 (7027 simulations)
+info string   Move 5: +1.000 (5397 simulations) # +1 here means it favours Player 1 more,
+info string   Move 7: +0.985 (6999 simulations) # And -1 for Player 2.
+info string   Move 6: +0.984 (7027 simulations) # That's why the best move here is 2 and not 5.
 info string   Move 3: +0.980 (7663 simulations)
 info string   Move 1: +0.968 (9699 simulations)
 info string   Move 2: +0.954 (13215 simulations)
