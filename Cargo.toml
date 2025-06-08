@@ -1,0 +1,8 @@
+[package]
+name = "foursight"
+version = "1.0.0"
+edition = "2024"
+authors = ["Saphereye"]
+
+[dependencies]
+rand = "0.9.1"
